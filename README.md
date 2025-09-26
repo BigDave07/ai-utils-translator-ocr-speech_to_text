@@ -42,9 +42,8 @@ Secrets: Stored as environment variables on server (Render). .env only for local
 
 # Clone
 
-git clone https://github.com/YOUR-USER/YOUR-REPO.git
-cd YOUR-REPO
-
+git clone https://github.com/BigDave07/ai-utils-translator-ocr-speech_to_text
+cd https://github.com/BigDave07/ai-utils-translator-ocr-speech_to_text
 
 # Create & activate a venv
 

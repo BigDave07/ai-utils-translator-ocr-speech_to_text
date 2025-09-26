@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI Utils • Translate, Speak & OCR</title>
+    <style>
+      :root {
+        --bg: #f6f7fb;
+        --card: #fff;
+        --text: #111;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --accent: #111;
+        --accent-weak: #d1d5db;
+      }
+      [hidden] { display: none !important; }
+      .dark {
+        --bg: #0e1015;
+        --card: #151924;
+        --text: #f2f4f7;
+        --muted: #9aa4b2;
+        --border: #1f2533;
+        --accent: #e5e7eb;
+        --accent-weak: #2b3346;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      .app { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+      .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+      .brand { display: flex; gap: 12px; align-items: center; }
+      .logo { font-size: 28px; }
+      h1 { font-size: 22px; margin: 0; }
+      .muted { color: var(--muted); }
+      .actions { display: flex; gap: 8px; }
+      .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+      .tab {
+        border: 1px solid var(--border); background: transparent; color: var(--text);
+        padding: 8px 12px; border-radius: 10px; cursor: pointer;
+      }
+      .tab.active { background: var(--card); box-shadow: 0 6px 18px rgba(0,0,0,.06); }
+      .panel { display: none; }
+      .panel.active { display: block; }
+      .card {
+        background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+        padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      }
+      .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+      label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+      select, textarea, input[type="text"] {
+        border: 1px solid var(--border); background: transparent; color: var(--text);
+        padding: 10px 12px; border-radius: 12px; font-size: 15px;
+      }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+      textarea { min-height: 160px; resize: vertical; width: 100%; }
+      .stack { display: flex; flex-direction: column; gap: 8px; }
+      .out {
+        min-height: 160px; padding: 12px; border-radius: 12px;
+        border: 1px dashed var(--border); background: rgba(0,0,0,.03);
+        white-space: pre-wrap;
+      }
+      .foot { display: flex; justify-content: space-between; align-items: center; }
+      .btn {
+        border: 1px solid var(--border); background: var(--card); color: var(--text);
+        padding: 10px 14px; border-radius: 12px; cursor: pointer;
+      }
+      .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .btn.ghost { background: transparent; }
+      .btn.link { background: transparent; border: none; text-decoration: underline; padding: 0; cursor: pointer; }
+      .spinner {
+        width: 14px; height: 14px; border: 2px solid var(--accent-weak);
+        border-top-color: transparent; border-radius: 50%; display: inline-block;
+        vertical-align: -2px; margin-right: 8px; animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .dropzone {
+        border: 2px dashed var(--border); border-radius: 16px; padding: 16px; text-align: center;
+        background: rgba(0,0,0,.02); margin-bottom: 12px;
+      }
+      .dropzone.drag { border-color: var(--accent); background: rgba(0,0,0,.05); }
+      .dropzone img { max-width: 100%; border-radius: 12px; margin-top: 12px; }
+      .footbar { display: flex; justify-content: center; margin: 12px 0 24px; }
+      .toast {
+        position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        padding: 10px 14px; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.18);
+      }
+
+      /* Speak visualizer & listening states */
+      #viz {
+        width: 100%; height: 140px; display: block;
+        border: 1px solid var(--border); border-radius: 12px; background: rgba(0,0,0,.03);
+      }
+      .listening #viz { background: rgba(0,0,0,.06); }
+      .btn.primary.listening { animation: pulse 1.2s ease-in-out infinite alternate; }
+      @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.03); box-shadow: 0 0 0 6px rgba(0,0,0,.06); } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">🧠</span>
+          <div>
+            <h1>AI Utils</h1>
+            <p class="muted">Translate, Speak & OCR — Flask + Google Cloud</p>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="theme" class="btn ghost" type="button" aria-label="Toggle theme">🌗</button>
+          <a id="repoLink" class="btn ghost" href="#" target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+      </header>
+
+      <nav class="tabs" role="tablist" aria-label="Tools">
+        <button class="tab active" data-tab="translate" role="tab" aria-selected="true">Translate</button>
+        <button class="tab" data-tab="speak" role="tab" aria-selected="false">Speak</button>
+        <button class="tab" data-tab="ocr" role="tab" aria-selected="false">OCR</button>
+      </nav>
+
+      <!-- Translate -->
+      <main class="panel active" id="tab-translate">
+        <div class="card">
+          <div class="controls">
+            <label>Source
+              <select id="source" aria-label="Source language">
+                <option value="auto" selected>Auto</option>
+              </select>
+            </label>
+
+            <button id="swap" class="btn ghost" type="button" title="Swap (Ctrl/Cmd+S)">⇄</button>
+
+            <label>Target
+              <select id="target" aria-label="Target language"></select>
+            </label>
+
+            <button id="btn" class="btn primary" type="button">
+              <span class="spinner" hidden></span>
+              Translate
+            </button>
+            <button id="copy" class="btn" type="button">Copy</button>
+            <span id="status" class="muted" role="status" aria-live="polite"></span>
+          </div>
+
+          <div class="grid">
+            <div class="stack">
+              <textarea id="input" placeholder="Enter text (any language)" aria-label="Input text"></textarea>
+              <div class="foot">
+                <span id="count" class="muted">0 / 5000</span>
+                <span class="hint muted">Tip: Ctrl/Cmd + Enter</span>
+              </div>
+            </div>
+            <div class="out" id="output" aria-label="Translation output"></div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Speak -->
+      <main class="panel" id="tab-speak">
+        <div class="card">
+          <h2>Voice → Text</h2>
+          <p class="muted">Click Speak and start talking (best in Chrome/Edge). Optionally auto-translate the result.</p>
+
+          <div class="controls">
+            <button id="speakBtn" class="btn primary" type="button">
+              <span class="spinner" hidden></span>
+              🎤 Speak
+            </button>
+
+            <label class="inline" style="display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="autoTranslate" />
+              <span>Translate automatically</span>
+            </label>
+
+            <span id="speakStatus" class="muted"></span>
+
+            <button id="sendToTranslate" class="btn ghost" type="button">Send to Translate</button>
+          </div>
+
+          <canvas id="viz" width="900" height="140"></canvas>
+        </div>
+      </main>
+
+      <!-- OCR -->
+      <main class="panel" id="tab-ocr">
+        <div class="card">
+          <h2>OCR (Image → Text)</h2>
+          <div id="drop" class="dropzone" aria-label="Drop image here">
+            <input type="file" id="ocrFile" accept="image/*" hidden />
+            <p>Drop an image here or <button id="pick" class="btn link" type="button">choose file</button></p>
+            <img id="preview" alt="Selected image preview" hidden />
+          </div>
+          <div class="controls">
+            <button id="ocrBtn" class="btn" type="button">
+              <span class="spinner" hidden></span>
+              Extract Text
+            </button>
+            <button id="toTranslate" class="btn ghost" type="button">Send to Translate</button>
+          </div>
+        </div>
+      </main>
+
+      <footer class="footbar muted">
+        <span>Tip: After OCR, send text to Translate in one click.</span>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <script>
+      // ---------- DOM refs ----------
+      const sourceSel = document.getElementById("source");
+      const targetSel = document.getElementById("target");
+      const inputEl = document.getElementById("input");
+      const outputEl = document.getElementById("output");
+      const btn = document.getElementById("btn");
+      const statusEl = document.getElementById("status");
+      const swapBtn = document.getElementById("swap");
+      const copyBtn = document.getElementById("copy");
+      const countEl = document.getElementById("count");
+      const toastEl = document.getElementById("toast");
+      const themeBtn = document.getElementById("theme");
+      const tabs = document.querySelectorAll(".tab");
+      const panels = document.querySelectorAll(".panel");
+      const repoLink = document.getElementById("repoLink");
+
+      // Speak
+      const speakBtn = document.getElementById("speakBtn");
+      const speakStatus = document.getElementById("speakStatus");
+      const autoTranslate = document.getElementById("autoTranslate");
+      const sendToTranslate = document.getElementById("sendToTranslate");
+      const speakPanel = document.getElementById("tab-speak");
+      const vizCanvas = document.getElementById("viz");
+      const vizCtx = vizCanvas.getContext("2d");
+
+      // OCR
+      const drop = document.getElementById("drop");
+      const pick = document.getElementById("pick");
+      const fileIn = document.getElementById("ocrFile");
+      const ocrBtn = document.getElementById("ocrBtn");
+      const preview = document.getElementById("preview");
+      const toTranslateBtn = document.getElementById("toTranslate");
+
+      // Optional repo link
+      repoLink.href = "https://github.com/YOUR_USERNAME/YOUR_REPO";
+
+      // ---------- Utils ----------
+      function showToast(msg, ms = 1800) {
+        toastEl.textContent = msg;
+        toastEl.hidden = false;
+        setTimeout(() => (toastEl.hidden = true), ms);
+      }
+      function setLoading(button, on) {
+        const spin = button.querySelector(".spinner");
+        if (spin) spin.hidden = !on;
+        button.disabled = !!on;
+      }
+      function updateCount() {
+        const n = inputEl.value.length;
+        countEl.textContent = `${n} / 5000`;
+      }
+      function autoResize() {
+        inputEl.style.height = "auto";
+        inputEl.style.height = inputEl.scrollHeight + "px";
+      }
+
+      // ---------- Tabs ----------
+      tabs.forEach((t) => {
+        t.addEventListener("click", () => {
+          tabs.forEach((x) => x.classList.remove("active"));
+          panels.forEach((p) => p.classList.remove("active"));
+          t.classList.add("active");
+          document.getElementById("tab-" + t.dataset.tab).classList.add("active");
+        });
+      });
+
+      // ---------- Theme ----------
+      themeBtn.addEventListener("click", () => document.documentElement.classList.toggle("dark"));
+
+      // ---------- Load languages ----------
+      async function loadLanguages() {
+        statusEl.textContent = "Loading languages…";
+        try {
+          const res = await fetch("/api/languages");
+          const data = await res.json();
+          const langs = data.languages || [];
+
+          // reset selects
+          targetSel.innerHTML = "";
+          sourceSel.innerHTML = '<option value="auto" selected>Auto</option>';
+
+          for (const { language, name } of langs) {
+            const optT = document.createElement("option");
+            optT.value = language; optT.textContent = `${name} (${language})`;
+            targetSel.appendChild(optT);
+
+            const optS = optT.cloneNode(true);
+            sourceSel.appendChild(optS);
+          }
+          targetSel.value = "en";
+          sourceSel.value = "auto";
+          statusEl.textContent = "";
+        } catch (e) {
+          statusEl.textContent = "Failed to load languages.";
+          console.error(e);
+        }
+      }
+
+      // ---------- Translate ----------
+      async function translate() {
+        const text = inputEl.value.trim();
+        const target = targetSel.value;
+        const source = sourceSel.value;
+        if (!text) { outputEl.textContent = "Please enter text."; return; }
+        if (text.length > 5000) { showToast("Text too long (max 5000)."); return; }
+
+        setLoading(btn, true);
+        statusEl.textContent = "Translating…";
+        outputEl.textContent = "";
+
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, target, source }),
+          });
+          const data = await res.json();
+          if (data.error) {
+            outputEl.textContent = `Error: ${data.error}`;
+          } else {
+            const { translatedText, detectedSourceLanguage } = data;
+            outputEl.textContent = translatedText || "(no result)";
+            statusEl.textContent = (source === "auto" && detectedSourceLanguage)
+              ? `Detected: ${detectedSourceLanguage}` : "";
+          }
+        } catch (e) {
+          outputEl.textContent = "Network/server error. Check console.";
+          console.error(e);
+        } finally {
+          setLoading(btn, false);
+        }
+      }
+
+      // ---------- Translate helpers ----------
+      btn.addEventListener("click", translate);
+      copyBtn.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(outputEl.textContent || ""); showToast("Copied"); }
+        catch { showToast("Copy failed"); }
+      });
+      swapBtn.addEventListener("click", () => {
+        const s = sourceSel.value, t = targetSel.value;
+        if (t !== "auto") sourceSel.value = t;
+        if (s !== "auto") targetSel.value = s;
+        if (outputEl.textContent) { inputEl.value = outputEl.textContent; outputEl.textContent = ""; }
+        updateCount(); autoResize();
+      });
+      inputEl.addEventListener("input", () => { updateCount(); autoResize(); });
+      inputEl.addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") translate(); });
+      window.addEventListener("DOMContentLoaded", () => { loadLanguages(); updateCount(); autoResize(); });
+
+      // ---------- OCR ----------
+      ["dragenter","dragover"].forEach(evt => {
+        drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.add("drag"); });
+      });
+      ["dragleave","drop"].forEach(evt => {
+        drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("drag"); });
+      });
+      drop.addEventListener("drop", e => {
+        const f = e.dataTransfer.files?.[0]; if (!f) return;
+        fileIn.files = e.dataTransfer.files;
+        showPreview(f);
+      });
+      pick.addEventListener("click", () => fileIn.click());
+      fileIn.addEventListener("change", () => { const f = fileIn.files?.[0]; if (f) showPreview(f); });
+
+      function showPreview(file) {
+        if (!file.type.startsWith("image/")) { showToast("Please choose an image."); return; }
+        const url = URL.createObjectURL(file);
+        preview.src = url; preview.hidden = false;
+      }
+
+      ocrBtn.addEventListener("click", async () => {
+        const f = fileIn.files?.[0];
+        if (!f) return showToast("Choose or drop an image first.");
+        const fd = new FormData(); fd.append("image", f);
+
+        setLoading(ocrBtn, true);
+        statusEl.textContent = "Running OCR…";
+        try {
+          const res = await fetch("/api/ocr", { method:"POST", body: fd });
+          const data = await res.json();
+          if (data.text) {
+            inputEl.value = data.text; showToast("OCR complete");
+            updateCount(); autoResize();
+          } else {
+            statusEl.textContent = data.error || "No text found.";
+          }
+        } catch (e) {
+          statusEl.textContent = "Network/server error."; console.error(e);
+        } finally {
+          setLoading(ocrBtn, false);
+        }
+      });
+
+      toTranslateBtn.addEventListener("click", () => {
+        document.querySelector('.tab[data-tab="translate"]').click();
+        showToast("Pasted into input");
+      });
+
+      // ---------- Speak (Web Speech + visualizer) ----------
+      const WebSpeech = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      let rec, listening = false, audioCtx, analyser, rafId, micStream;
+
+      function drawBars() {
+        if (!analyser) return;
+        const buffer = new Uint8Array(analyser.frequencyBinCount);
+        const w = vizCanvas.width, h = vizCanvas.height;
+        const bars = 64, step = Math.floor(buffer.length / bars);
+
+        function frame() {
+          rafId = requestAnimationFrame(frame);
+          analyser.getByteFrequencyData(buffer);
+          vizCtx.clearRect(0, 0, w, h);
+          const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#111';
+          vizCtx.fillStyle = (accent.trim() || '#111');
+          for (let i = 0; i < bars; i++) {
+            const v = buffer[i * step] / 255;
+            const barH = v * h;
+            const x = (i / bars) * w;
+            const barW = w / bars - 2;
+            vizCtx.fillRect(x, h - barH, barW, barH);
+          }
+        }
+        frame();
+      }
+
+      async function startVisualizer(stream) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCtx.createMediaStreamSource(stream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+        drawBars();
+      }
+
+      function stopVisualizer() {
+        if (rafId) cancelAnimationFrame(rafId); rafId = null;
+        if (audioCtx) { audioCtx.close(); audioCtx = null; }
+        if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+        analyser = null;
+      }
+
+      function stopListeningUI() {
+        speakBtn.classList.remove("listening");
+        speakPanel.classList.remove("listening");
+        setLoading(speakBtn, false);
+        listening = false;
+        stopVisualizer();
+      }
+
+      function getSpeechLocale() {
+        const v = (sourceSel?.value || "auto").toLowerCase();
+        if (v === "fr") return "fr-FR";
+        if (v === "es") return "es-ES";
+        if (v === "de") return "de-DE";
+        if (v === "pt") return "pt-PT";
+        if (v === "it") return "it-IT";
+        if (v === "ja") return "ja-JP";
+        if (v === "zh") return "zh-CN";
+        return "en-US";
+      }
+
+      async function startListening() {
+        if (!WebSpeech) {
+          speakBtn.disabled = true;
+          speakStatus.textContent = "Speech recognition not supported in this browser (try Chrome/Edge).";
+          return;
+        }
+
+        // Toggle stop
+        if (listening) { try { rec && rec.stop(); } catch {} stopListeningUI(); return; }
+
+        // Mic permission + visualizer
+        try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { speakStatus.textContent = "Mic permission denied."; return; }
+        await startVisualizer(micStream);
+
+        rec = new WebSpeech();
+        rec.lang = getSpeechLocale();
+        rec.interimResults = true;
+        rec.maxAlternatives = 1;
+
+        speakBtn.classList.add("listening");
+        speakPanel.classList.add("listening");
+        speakStatus.textContent = "Listening… (click again to stop)";
+        setLoading(speakBtn, true);
+        listening = true;
+        inputEl.focus();
+
+        let finalDetected = false;
+
+        rec.onresult = (e) => {
+          const txt = Array.from(e.results).map(r => r[0].transcript).join(" ");
+          inputEl.value = txt;
+          updateCount(); autoResize();
+
+          if (e.results[0].isFinal) {
+            finalDetected = true;
+            speakStatus.textContent = autoTranslate.checked ? "Transcribed. Translating…" : "Transcribed.";
+            if (autoTranslate.checked) translate();
+          }
+        };
+
+        rec.onerror = (e) => { speakStatus.textContent = "Speech error: " + e.error; stopListeningUI(); };
+        rec.onend   = () => {
+          if (!finalDetected && (!inputEl.value || !inputEl.value.trim())) speakStatus.textContent = "No speech detected.";
+          stopListeningUI();
+        };
+
+        try { rec.start(); }
+        catch (e) { speakStatus.textContent = "Could not start: " + e.message; stopListeningUI(); }
+      }
+
+      speakBtn.addEventListener("click", startListening);
+      sendToTranslate.addEventListener("click", () => {
+        const translateTabBtn = document.querySelector('.tab[data-tab="translate"]');
+        if (translateTabBtn) translateTabBtn.click();
+        inputEl.focus();
+      });
+    </script>
+  </body>
+</html>
